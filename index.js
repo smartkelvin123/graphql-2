@@ -1,6 +1,6 @@
 const { ApolloServer } = require("@apollo/server");
 const { startStandaloneServer } = require("@apollo/server/standalone");
-// const { v1: uuid } = require("uuid");
+const { v1: uuid } = require("uuid");
 
 let authors = [
   {
@@ -100,7 +100,7 @@ const typeDefs = `
     authorCount: Int!
     books: [Book!]!
     bookCount: Int!
-    allBooks: [Book!]!
+    allBooks(author: String, genre: String): [Book!]!
   }
 
   type Mutation {
@@ -111,6 +111,7 @@ const typeDefs = `
       author: String!
       genres: [String!]!
     ): Book
+    editAuthor(name: String!, setBornTo: Int!): Author
   }
 `;
 
@@ -120,7 +121,27 @@ const resolvers = {
     authorCount: () => authors.length,
     books: () => books,
     bookCount: () => books.length,
-    allBooks: () => books,
+    allBooks: (parent, args) => {
+      if (!args.author && !args.genre) {
+        return books;
+      }
+
+      let filteredBooks = books;
+
+      if (args.author) {
+        filteredBooks = filteredBooks.filter(
+          (book) => book.author === args.author
+        );
+      }
+
+      if (args.genre) {
+        filteredBooks = filteredBooks.filter((book) =>
+          book.genres.includes(args.genre)
+        );
+      }
+
+      return filteredBooks;
+    },
   },
   Mutation: {
     addAuthor: (parent, args) => {
@@ -129,15 +150,33 @@ const resolvers = {
       return author;
     },
     addBook: (parent, args) => {
+      let author = authors.find((author) => author.name === args.author);
+
+      if (!author) {
+        author = { name: args.author, id: uuid() };
+        authors.push(author);
+      }
+
       const book = { id: uuid(), ...args };
       books.push(book);
       return book;
+    },
+    editAuthor: (parent, args) => {
+      const { name, setBornTo } = args;
+
+      const authorIndex = authors.findIndex((author) => author.name === name);
+
+      if (authorIndex === -1) {
+        return null; // Author not found
+      }
+
+      authors[authorIndex].born = setBornTo;
+      return authors[authorIndex];
     },
   },
 };
 
 const server = new ApolloServer({ typeDefs, resolvers });
-
 startStandaloneServer(server, {
   listen: { port: 4000 },
 }).then(({ url }) => {
